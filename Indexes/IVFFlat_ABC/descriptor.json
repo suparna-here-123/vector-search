@@ -1,0 +1,14 @@
+{
+    "Name": "ABC",
+    "Dimensions": 512,
+    "Namespaces": {
+        "users": {
+            "Vectors": 8,
+            "Clusters": {
+                "C0": "/home/suppra/Desktop/pinecone/Indexes/IVFFlat_ABC/users/cluster_0",
+                "C1": "/home/suppra/Desktop/pinecone/Indexes/IVFFlat_ABC/users/cluster_1",
+                "C2": "/home/suppra/Desktop/pinecone/Indexes/IVFFlat_ABC/users/cluster_2"
+            }
+        }
+    }
+}
