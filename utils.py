@@ -23,27 +23,27 @@ def KMeansClustering(path: str, k: int):
     return clusters
 
 def getClusters(vectors, centers) :
-        print(f"Inside getClusters - received {len(vectors)} vectors")
-        # Create a cluster with center:vector key-value pair
         numCenters = len(centers)
+        justCenters = [i[0][1] for i in centers]              
+        distFromcenters = [0] * numCenters
         
-        # Initialize the cluster
+        # Initialize the clusters
         clusters = [{'center' : centers[i], 'vectors' : []} for i in range(numCenters)]
         
-        # Assign vectors to closest center
-        for i, vector in enumerate(vectors) :
-            justVector = vector[0][1]                 
-            distFromcenters = [0] * numCenters
+        for vector in vectors :
+            justVector = vector[0][1]
 
             # Calculate distance of this vector from all centers
-            for centerIndex in range(numCenters):
-                justCenter = centers[centerIndex][0][1]
+            for j, justCenter in enumerate(justCenters):
                 dis = euclideanDistance(justCenter, justVector)
-                distFromcenters[centerIndex] = dis
-            
+                distFromcenters[j] = dis
+        
             toCluster = np.argmin(distFromcenters)
             clusters[toCluster]['vectors'].append(vector)
 
+        print("Clusters")
+        for i in clusters :
+            print(i)
         return clusters
 
 def updateCenters(clusters) :
@@ -58,17 +58,16 @@ def updateCenters(clusters) :
 def euclideanDistance(v1, v2) :
     return np.sqrt(np.sum((v1 - v2) ** 2))
 
-def nearestCluster(v, clusters:dict) :
+def nearestCluster(v, clusterPaths:list) :
     '''Return the path and distance of the nearest cluster whose centroid is closest to given query vector'''
-    cPaths = []
     distances = []
+
     # Iterating over every cluster's centroid and finding query vector distance from it
-    for c, cPath in clusters.items() :
-        cPaths.append(cPath)
-        centroid = np.load(f'{cPath}/center.py', allow_pickle=True)
-        dist = euclideanDistance(v[0][1], centroid[0][1])
+    for cPath in clusterPaths :
+        centroid = np.load(f'{cPath}/center.npy', allow_pickle=True)
+        dist = euclideanDistance(v[0][1], centroid)
         distances.append(dist)
     
     # Return path of the cluster whose centroid is closest to query vector
     closestClusterIndex = np.argmin(distances)
-    return [cPaths[closestClusterIndex], distances[closestClusterIndex]]
+    return [clusterPaths[closestClusterIndex], distances[closestClusterIndex]]

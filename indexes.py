@@ -35,24 +35,30 @@ class VanillaIndex(ABC) :
         return namespacePath
 
     def upsert(self, vector, namespace='default') :
-        '''Upsert a single vector into the namespace'''
+        '''Upsert a single vector into the namespace after clusters have been created'''
         namespacePath = self.getNamespace(namespace=namespace)
         try :
             vecID = uuid()
 
-            # Save vector into namespace
-            np.save(f'{namespacePath}/{vecID}.npy', vector)
+            # Should assign it to the right cluster
+            # 1) Extract all the cluster centers from storage
+            clusterPaths = []
+            for item in os.listdir(namespacePath) :
+                clusterPath = os.path.join(namespacePath, item)
+                clusterPaths.append(clusterPath)
+            
 
-            # Increase count of vectors in namespace by 1
+            # 2) Find nearest cluster
+            closestClusterPath, distance = nearestCluster(vector , clusterPaths)
+            print(f'{vector} is closest to {closestClusterPath} at {distance}')
+
+            # 3) Save vector in that cluster
+            np.save(f'{closestClusterPath}/{vecID}.npy', vector)
+            print(f"Saved vector to {closestClusterPath}")
+
+            # 4) Increase count of vectors in namespace by 1
             self.descriptor['Namespaces'][namespace]['Vectors'] += 1
             self.flushIndex()
-
-
-            # Should assign it to the right cluster
-
-
-
-
 
             return 1
         
@@ -62,17 +68,21 @@ class VanillaIndex(ABC) :
 
     def upsert_batch(self, vectors:list, namespace='default') :
         '''Upsert multiple vectors into the namespace'''
+        namespacePath = self.getNamespace(namespace=namespace)
         for vec in vectors :
-            res = self.upsert(vector=vec, namespace=namespace)
-            if not res :
-                print('single upsert failed')
-                return res
-    
+            # Create a unique name for this vector            
+            vecID = uuid()
 
-        # Check if threshold for clustering has been reached
+            # Save vector into namespace
+            np.save(f'{namespacePath}/{vecID}.npy', vec)
+
+            # Increase count of vectors in namespace by 1
+            self.descriptor['Namespaces'][namespace]['Vectors'] += 1
+            
+        self.flushIndex()
+
+        # Check if threshold for clustering has been reached, if so, organise
         self.organise(namespace)
-        
-        # Call cluster operation (implementation depends on type of index)
         return 1
 
     @abstractmethod
@@ -151,52 +161,72 @@ class IVFFlat(VanillaIndex) :
     def search(self, query, namespace='default', topK=3) :
         # Compare vector with all centroids in this namespace and find nearest one
         Q = query[0][1]
-        allNamespaces = self.descriptor['Namespaces']
-        for ns in allNamespaces :
-            clusters = ns.get('Clusters', None)
+        nsInfo = self.descriptor['Namespaces'][namespace]
+        cluster_name_path = nsInfo.get('Clusters', None)
 
-            # By default, search the whole namespace if there are no clusters yet
-            searchPath = self.getNamespace(namespace)
+        # By default, search the whole namespace if there are no clusters yet
+        searchPath = self.getNamespace(namespace)
 
-            # If there are clusters, search in closest one
-            if clusters :
-                nearestClusterPath, distance = nearestCluster(query, clusters)
-                print(f"Nearest cluster = {nearestClusterPath} at distance {distance}")
-                searchPath = nearestClusterPath
-                
-            # Do brute-force search/sort
-            vec_dist = []
-            for vecPath in os.listdir(searchPath) :
-                vec = np.load(vecPath, allow_pickle=True)
-                vec_dist.append(vec, euclideanDistance(Q, vec[0][1]))
-            
-            # Sort vectors by distance from query
-            vec_dist.sort(key=lambda item : item[1])
+        # If there are clusters, search in closest one
+        if cluster_name_path :
+            clusterPaths = list(cluster_name_path.values())
+            nearestClusterPath, distance = nearestCluster(query, clusterPaths)
+            print(f"Nearest cluster = {nearestClusterPath} at distance {distance}")
+            searchPath = nearestClusterPath
+        
+        print(f"Searching in {searchPath}")
+        # Do brute-force search/sort
+        vec_dist = []
+        for vecPath in os.listdir(searchPath) :
+            if not vecPath.startswith('center') :
+                vec = np.load(os.path.join(searchPath, vecPath), allow_pickle=True)
+                vec_dist.append((vec, euclideanDistance(Q, vec[0][1])))
+        
+        # Sort vectors by distance from query
+        vec_dist.sort(key=lambda item : item[1])
 
-            # Return top K vectors with their distances from query
-            return vec_dist[:topK]
-  
+        print("Distances")
+        for i in vec_dist :
+            print(i)
+
+        # Return top K vectors with their distances from query
+        return vec_dist[:topK]
+
 if __name__ == "__main__" :
     custom = [('_id', 'i4'), ('vector', int, (4,)), ('metadata', dict)]
 
-    a1 = np.array([1,2,3,4])
-    a2 = np.array([1,2,5,4])
-    a3 = np.array([1,12,3,4])
-    a4 = np.array([1,12,3,6])
-    a5 = np.array([1,2,8,4])
-    a6 = np.array([1,2,8,5])
-    a7 = np.array([0,12,2,4])
-    a8 = np.array([0,11,3,6])
+    # a1 = np.array([1,2,3,4])
+    # a2 = np.array([1,2,5,4])
+    # a3 = np.array([1,12,3,4])
+    # a4 = np.array([1,12,3,6])
+    # a5 = np.array([1,2,8,4])
+    # a6 = np.array([1,2,8,5])
+    # a7 = np.array([0,12,2,4])
+    # a8 = np.array([0,11,3,6])
 
-    v1 = np.array([(1, a1, {'docId' : 15, 'type' : 'political'})], dtype=custom)
-    v2 = np.array([(2, a2, {'docId' : 13, 'type' : 'history'})], dtype=custom)
-    v3 = np.array([(3, a3, {'docId' : 15, 'type' : 'economics'})], dtype=custom)
-    v4 = np.array([(4, a4, {'docId' : 15, 'type' : 'biology'})], dtype=custom)
-    v5 = np.array([(1, a5, {'docId' : 14, 'type' : 'political'})], dtype=custom)
-    v6 = np.array([(2, a6, {'docId' : 12, 'type' : 'history'})], dtype=custom)
-    v7 = np.array([(3, a7, {'docId' : 12, 'type' : 'physics'})], dtype=custom)
-    v8 = np.array([(4, a8, {'docId' : 15, 'type' : 'biology'})], dtype=custom)
+    # v1 = np.array([(1, a1, {'docId' : 15, 'type' : 'political'})], dtype=custom)
+    # v2 = np.array([(2, a2, {'docId' : 13, 'type' : 'political'})], dtype=custom)
+    # v3 = np.array([(3, a3, {'docId' : 15, 'type' : 'economics'})], dtype=custom)
+    # v4 = np.array([(4, a4, {'docId' : 15, 'type' : 'economics'})], dtype=custom)
+    # v5 = np.array([(5, a5, {'docId' : 14, 'type' : 'biology'})], dtype=custom)
+    # v6 = np.array([(6, a6, {'docId' : 12, 'type' : 'biology'})], dtype=custom)
+    # v7 = np.array([(7, a7, {'docId' : 12, 'type' : 'history'})], dtype=custom)
+    # v8 = np.array([(8, a8, {'docId' : 15, 'type' : 'history'})], dtype=custom)
 
     idx = IVFFlat('ABC')
-    resUpsert = idx.upsert_batch([v1, v2, v3, v4, v5, v6, v7, v8], namespace='users')
-    print('Upsert operation success : ', bool(resUpsert))
+    # resUpsert = idx.upsert_batch([v1, v2, v3, v4, v5, v6, v7, v8], namespace='users')
+    # print('Batch upsert operation success : ', bool(resUpsert))
+
+    # a9 = np.array([1,12,3,5])
+    # v9 = np.array([(9, a9, {'docId' : 15, 'type' : 'economics'})], dtype=custom)
+    # idx.upsert(v9, namespace='users')
+
+    # a10 = np.array([1,12,3,7])
+    # v10 = np.array([(10, a10, {'docId' : 15, 'type' : 'economics'})], dtype=custom)
+    # idx.upsert(v10, namespace='users')
+
+    a = np.array([1,2,3,4])
+    v = np.array([(11, a, {'docId' : 15, 'type' : 'biology'})], dtype=custom)
+    topK = idx.search(v, 'users')
+    for i in topK :
+        print(i)
