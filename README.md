@@ -1,10 +1,4 @@
-### VectorSoup - A tiny implementation of vector databases
-
-IVF Flat :
-1) First time batch upsert - create clusters
-2) Subsequent single-vector upserts - assign to existing clusters
-3) PENDING : Every N (TBD) vectors in a given namespace - retrain/reorganise clusters
-
+### VectorSoup - A tiny implementation of vector indexes
 
 #### Vanilla Index methods explained
 1. init: Initializes index name, dimensions of vectors in it, and vector type. Creates a new index (folder in this implementation). Add metadata to an index descriptor.json file.
