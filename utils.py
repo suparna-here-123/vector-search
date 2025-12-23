@@ -3,6 +3,8 @@ from math import sqrt
 from random import sample
 import numpy as np
 
+'''Helper functions to perform K-means clustering'''
+
 def KMeansClustering(path: str, k: int):
     '''Creates k clusters for a given directory(namespace/cluster)'''
     # 1) Bring vectors in path into memory
